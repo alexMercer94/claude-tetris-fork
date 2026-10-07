@@ -1,0 +1,60 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    # Skip bot-authored issues; on edit, only react to title/body changes
+    if: |
+      github.event.issue.user.type != 'Bot' &&
+      (github.event.action == 'opened' ||
+       github.event.changes.title != null ||
+       github.event.changes.body != null)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: '--allowedTools "Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*),Bash(gh api:*),Read,Glob,Grep"'
+          prompt: |
+            You are triaging issue #${{ github.event.issue.number }} in repo ${{ github.repository }}.
+            Trigger action: ${{ github.event.action }} (opened = new issue, edited = title/body changed).
+
+            Goal: assign labels and write a general diagnosis that a developer can later use to implement the fix.
+
+            Steps:
+            1. Run `gh issue view ${{ github.event.issue.number }} --json title,body,labels,comments` to read the issue.
+            2. Run `gh label list --limit 100`. Choose labels ONLY from this list. NEVER create new labels.
+               Apply with `gh issue edit ${{ github.event.issue.number }} --add-label "a,b"`.
+               On edited issues, remove labels that no longer fit with `--remove-label`, but only labels you assigned earlier. Never remove labels a human added.
+            3. Read the relevant code (this repo is a Tetris game: game.js, index.html, style.css) with Read/Glob/Grep to locate the probable cause or the place to change.
+            4. Write the diagnosis in the SAME LANGUAGE as the issue, with these sections:
+               - Summary of the problem
+               - Type (bug / feature / improvement / question)
+               - Probable cause / technical analysis (name files and functions)
+               - Files to modify
+               - Proposed solution (ordered steps)
+               - Risks / edge cases
+               - Missing information (only if needed)
+            5. Publish the diagnosis as ONE comment. Start the comment body with the hidden marker `<!-- claude-issue-triage -->`.
+               - Find an existing one: `gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments --jq '.[] | select(.body | contains("<!-- claude-issue-triage -->")) | .id'`
+               - If an id is returned, update it: `gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -f body="<new body>"`
+               - If none, create it: `gh issue comment ${{ github.event.issue.number }} --body "<body>"`
+            6. Do NOT modify code, create branches, or open PRs. Only labels and the single diagnosis comment.
