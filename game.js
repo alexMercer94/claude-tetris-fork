@@ -42,7 +42,16 @@ const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
 
+const startScreen = document.getElementById('start-screen');
+const startRecords = document.getElementById('start-records');
+const playBtn = document.getElementById('play-btn');
+const resetRecordsBtn = document.getElementById('reset-records-btn');
+const nameForm = document.getElementById('name-form');
+const nameInput = document.getElementById('name-input');
+const overlayRecords = document.getElementById('overlay-records');
+
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let combo = 0, maxCombo = 0;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -105,7 +114,10 @@ function clearLines() {
       r++;
     }
   }
+  if (!cleared) combo = 0;
   if (cleared) {
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
@@ -239,8 +251,32 @@ function endGame() {
   draw();
   overlayTitle.textContent = 'GAME OVER';
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  Records.updateBests(lines, maxCombo);
+  if (Records.qualifies(score)) {
+    nameInput.value = Records.getLastName();
+    nameForm.classList.remove('hidden');
+  } else {
+    nameForm.classList.add('hidden');
+  }
+  Records.render(overlayRecords);
   overlay.classList.remove('hidden');
+  if (!nameForm.classList.contains('hidden')) nameInput.focus();
 }
+
+// ---- Records: guardar nombre ----
+nameForm.addEventListener('submit', e => {
+  e.preventDefault();
+  if (nameForm.classList.contains('hidden')) return; // ya guardado
+  const name = nameInput.value.trim().slice(0, 12) || 'Anónimo';
+  Records.setLastName(name);
+  const id = Records.add(name, score, lines, maxCombo);
+  nameForm.classList.add('hidden');
+  Records.render(overlayRecords, id);
+  document.getElementById('save-record-btn').blur();
+});
+
+// evita que escribir el nombre mueva las piezas
+nameInput.addEventListener('keydown', e => e.stopPropagation());
 
 function togglePause() {
   if (gameOver) return;
@@ -279,6 +315,10 @@ function init() {
   score = 0;
   lines = 0;
   level = 1;
+  combo = 0;
+  maxCombo = 0;
+  nameForm.classList.add('hidden');
+  overlayRecords.textContent = '';
   paused = false;
   gameOver = false;
   dropInterval = 1000;
@@ -293,6 +333,7 @@ function init() {
 }
 
 document.addEventListener('keydown', e => {
+  if (!current || !startScreen.classList.contains('hidden')) return; // aún no se ha empezado
   if (e.code === 'KeyP') { togglePause(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
@@ -317,7 +358,24 @@ document.addEventListener('keydown', e => {
   updateHUD();
 });
 
-restartBtn.addEventListener('click', init);
+restartBtn.addEventListener('click', () => { init(); restartBtn.blur(); });
+
+// ---- Pantalla de inicio ----
+playBtn.addEventListener('click', () => {
+  startScreen.classList.add('hidden');
+  init();
+  playBtn.blur();
+});
+
+resetRecordsBtn.addEventListener('click', () => {
+  if (confirm('¿Borrar todos los records?')) {
+    Records.reset();
+    Records.render(startRecords);
+  }
+  resetRecordsBtn.blur();
+});
+
+Records.render(startRecords);
 
 // ---- Tema claro/oscuro ----
 const themeToggle = document.getElementById('theme-toggle');
@@ -332,8 +390,7 @@ function applyTheme(theme, save) {
   gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || gridColor;
   if (save) {
     try { localStorage.setItem('theme', theme); } catch (e) {}
-    draw();
-    drawNext();
+    if (current) { draw(); drawNext(); }
   }
 }
 
@@ -347,4 +404,4 @@ let savedTheme = null;
 try { savedTheme = localStorage.getItem('theme'); } catch (e) {}
 applyTheme(savedTheme === 'light' ? 'light' : 'dark', false);
 
-init();
+// el juego arranca desde la pantalla de inicio (botón Jugar)
