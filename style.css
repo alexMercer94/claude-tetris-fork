@@ -245,3 +245,23 @@ kbd {
   outline-offset: 4px;
   border-radius: 12px;
 }
+
+/* ---- Selector de skin ---- */
+.skin-picker {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#skin-select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}

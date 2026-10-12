@@ -4,17 +4,8 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS = [
-  null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#90caf9', // J - pale blue
-  '#ffb74d', // L - orange
-  '#b0bec5', // N - tuerca (gris metal)
-];
+// Colores y dibujo de bloques: ver skins.js (SKINS)
+let currentSkin = 'retro';
 
 const PIECES = [
   null,
@@ -160,28 +151,38 @@ function updateHUD() {
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
-  context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
-  context.globalAlpha = 1;
+  const skin = SKINS[currentSkin];
+  skin.drawBlock(context, x, y, skin.colors[colorIndex], size, alpha);
 }
 
 function drawNutHole(context, x, y, size, alpha) {
+  const skin = SKINS[currentSkin];
+  context.save();
   context.globalAlpha = alpha ?? 1;
-  context.strokeStyle = COLORS[8];
+  context.strokeStyle = skin.colors[8];
+  if (currentSkin === 'neon') {
+    context.shadowColor = skin.colors[8];
+    context.shadowBlur = 10;
+  }
   context.lineWidth = 3;
   context.beginPath();
   context.arc(x * size + size / 2, y * size + size / 2, size * 0.3, 0, Math.PI * 2);
   context.stroke();
-  context.globalAlpha = 1;
+  context.restore();
+}
+
+// Fondo propio de la skin; sin fondo se deja ver el CSS
+function clearCanvas(context, cv) {
+  context.clearRect(0, 0, cv.width, cv.height);
+  const bg = SKINS[currentSkin].boardBg;
+  if (bg) {
+    context.fillStyle = bg;
+    context.fillRect(0, 0, cv.width, cv.height);
+  }
 }
 
 function drawGrid() {
-  ctx.strokeStyle = gridColor;
+  ctx.strokeStyle = SKINS[currentSkin].grid || gridColor;
   ctx.lineWidth = 0.5;
   for (let c = 1; c < COLS; c++) {
     ctx.beginPath();
@@ -198,7 +199,7 @@ function drawGrid() {
 }
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  clearCanvas(ctx, canvas);
   drawGrid();
 
   // board
@@ -223,7 +224,7 @@ function draw() {
 
 function drawNext() {
   const NB = 30;
-  nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  clearCanvas(nextCtx, nextCanvas);
   const shape = next.shape;
   const offX = Math.floor((4 - shape[0].length) / 2);
   const offY = Math.floor((4 - shape.length) / 2);
@@ -342,6 +343,29 @@ themeToggle.addEventListener('click', () => {
   applyTheme(light ? 'dark' : 'light', true);
   themeToggle.blur(); // evita que Space active el botón
 });
+
+// ---- Skins ----
+const skinSelect = document.getElementById('skin-select');
+
+function applySkin(name, save) {
+  if (!SKINS[name]) name = 'retro';
+  currentSkin = name;
+  skinSelect.value = name;
+  if (save) {
+    try { localStorage.setItem('skin', name); } catch (e) {}
+    draw();
+    drawNext();
+  }
+}
+
+skinSelect.addEventListener('change', () => {
+  applySkin(skinSelect.value, true);
+  skinSelect.blur(); // evita que las flechas/Space cambien la skin
+});
+
+let savedSkin = null;
+try { savedSkin = localStorage.getItem('skin'); } catch (e) {}
+applySkin(savedSkin, false);
 
 let savedTheme = null;
 try { savedTheme = localStorage.getItem('theme'); } catch (e) {}
